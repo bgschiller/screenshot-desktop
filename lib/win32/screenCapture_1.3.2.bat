@@ -68,6 +68,21 @@ public class ScreenCapture
 
     /// Creates an Image object containing a screen shot of a specific window
 
+    public static User32.RECT scaleRect(IntPtr hdc, User32.RECT rect) {
+      var vRezResponse = User32.GetDeviceCaps(hdc, (int) User32.DeviceCap.DESKTOPVERTRES );
+      var hRezResponse = User32.GetDeviceCaps(hdc, (int) User32.DeviceCap.DESKTOPHORZRES);
+      double hScale = hRezResponse / (double) (rect.right - rect.left);
+      double vScale = vRezResponse / (double) (rect.bottom - rect.top);
+
+      User32.RECT scaledRect;
+
+      scaledRect.left = (int) (rect.left * hScale);
+      scaledRect.right = (int) (rect.right * hScale);
+      scaledRect.top = (int) (rect.top * vScale);
+      scaledRect.bottom = (int) (rect.bottom * vScale);
+      return scaledRect;
+    }
+
     private Image CaptureWindow(IntPtr handle)
     {
         // get te hDC of the target window
@@ -76,7 +91,8 @@ public class ScreenCapture
         User32.RECT windowRect = new User32.RECT();
         User32.GetWindowRect(handle, ref windowRect);
 
-        Image img = CaptureWindowFromDC(handle, hdcSrc, windowRect);
+
+        Image img = CaptureWindowFromDC(handle, hdcSrc, scaleRect(hdcSrc, windowRect));
         User32.ReleaseDC(handle, hdcSrc);
         return img;
     }
@@ -84,6 +100,7 @@ public class ScreenCapture
         // get the size
         int width = windowRect.right - windowRect.left;
         int height = windowRect.bottom - windowRect.top;
+        Console.WriteLine("width: {0}, height: {1}", width, height);
         // create a device context we can copy to
         IntPtr hdcDest = GDI32.CreateCompatibleDC(hdcSrc);
         // create a bitmap we can copy it to,
@@ -314,6 +331,8 @@ public class ScreenCapture
         public static extern IntPtr GetWindowRect(IntPtr hWnd, ref RECT rect);
         [DllImport("user32.dll")]
         public static extern IntPtr GetForegroundWindow();
+        [DllImport("gdi32.dll")]
+        public static extern int GetDeviceCaps(IntPtr hdc, int nIndex);
 
        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
        public struct MONITORINFOEX
@@ -333,6 +352,12 @@ public class ScreenCapture
 
        [DllImport("user32.dll")]
        public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumDelegate lpfnEnum, IntPtr dwData);
+
+       public enum DeviceCap
+       {
+          DESKTOPVERTRES  = 117,
+          DESKTOPHORZRES = 118
+      }
     }
 
     private class MonitorInfoWithHandle
@@ -350,7 +375,7 @@ public class ScreenCapture
         var mi = new User32.MONITORINFOEX();
         mi.size = (uint)Marshal.SizeOf(mi);
         User32.GetMonitorInfo(hMonitor, ref mi);
-
+        mi.Monitor = scaleRect(hdcMonitor, mi.Monitor);
         _monitorInfos.Add(new MonitorInfoWithHandle(hMonitor, mi));
         return true;
     }
@@ -360,8 +385,8 @@ public class ScreenCapture
         mi.size = (uint)Marshal.SizeOf(mi);
         User32.GetMonitorInfo(hMonitor, ref mi);
         if (mi.DeviceName.ToLower().Equals(deviceName.ToLower())) {
-            Console.WriteLine("hMonitor is {0}, hdcMonitor is {1}", hMonitor, hdcMonitor);
-            capturedImage = CaptureWindowFromDC(hMonitor, hdcMonitor, lprcMonitor);
+
+            capturedImage = CaptureWindowFromDC(hMonitor, hdcMonitor, mi.Monitor);
         }
         return true;
     }
@@ -374,8 +399,8 @@ public class ScreenCapture
     private static List<MonitorInfoWithHandle> GetMonitors()
     {
         _monitorInfos = new List<MonitorInfoWithHandle>();
-
-        User32.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, MonitorEnum, IntPtr.Zero);
+        IntPtr hdc = User32.GetDC(IntPtr.Zero);
+        User32.EnumDisplayMonitors(hdc, IntPtr.Zero, MonitorEnum, IntPtr.Zero);
 
         return _monitorInfos;
     }
