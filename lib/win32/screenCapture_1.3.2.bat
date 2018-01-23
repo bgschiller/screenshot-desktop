@@ -385,8 +385,8 @@ public class ScreenCapture
         mi.size = (uint)Marshal.SizeOf(mi);
         User32.GetMonitorInfo(hMonitor, ref mi);
         if (mi.DeviceName.ToLower().Equals(deviceName.ToLower())) {
-
-            capturedImage = CaptureWindowFromDC(hMonitor, hdcMonitor, mi.Monitor);
+            User32.RECT scaled = scaleRect(hdcMonitor, mi.Monitor);
+            capturedImage = CaptureWindowFromDC(hMonitor, hdcMonitor, scaled);
         }
         return true;
     }
